@@ -1,0 +1,10 @@
+{
+  "name": "donexus-coding-challenge",
+  "private": true,
+  "scripts": {
+    "dev:all": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1"
+  }
+}
