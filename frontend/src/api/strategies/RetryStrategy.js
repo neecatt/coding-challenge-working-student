@@ -1,6 +1,6 @@
 import { API_CONFIG } from '../config.js';
 
-// Retry Strategy - Single Responsibility: Retry logic
+//Retry logic
 export class RetryStrategy {
   static async execute(requestFn, maxRetries = API_CONFIG.retries) {
     let lastError;

@@ -1,4 +1,4 @@
-// Logger - Single Responsibility: Logging
+//Logging
 export class ApiLogger {
   static log(method, endpoint, data = null, response = null) {
     if (!import.meta.env.DEV) return;

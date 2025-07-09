@@ -1,6 +1,6 @@
 import { ApiLogger } from '../utils/ApiLogger.js';
 
-// Base API Service - Open/Closed: Base class for API operations
+//Base class for API operations
 export class BaseApiService {
   constructor(httpClient) {
     this.httpClient = httpClient;

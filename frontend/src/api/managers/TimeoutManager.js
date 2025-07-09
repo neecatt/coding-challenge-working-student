@@ -1,6 +1,6 @@
 import { API_CONFIG } from '../config.js';
 
-// Timeout Manager - Single Responsibility: Timeout handling
+//Timeout handling
 export class TimeoutManager {
   static createTimeout(timeoutMs = API_CONFIG.timeout) {
     const controller = new AbortController();

@@ -1,7 +1,7 @@
 import { BaseApiService } from './BaseApiService.js';
 import { QueryParameterBuilder } from '../builders/QueryParameterBuilder.js';
 
-// Ticket Service - Single Responsibility: Ticket-specific operations
+//Ticket-specific operations
 export class TicketService extends BaseApiService {
   /**
    * Get all tickets with optional filtering and pagination

@@ -1,6 +1,6 @@
 import { ApiError } from '../errors.js';
 
-// Response Handler - Single Responsibility: Response processing
+//Response processing
 export class ResponseHandler {
   static async handle(response) {
     const contentType = response.headers.get('content-type');
