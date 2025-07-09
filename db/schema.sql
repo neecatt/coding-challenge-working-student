@@ -39,3 +39,8 @@ INSERT INTO tickets (title, description, status, user_id, organisation_id) VALUE
   ('Website down',            'Landing page returns 500.',        'open',    3, 2),
   ('Request new laptop',      'Need a MacBook Pro M3.',           'pending', 1, 1),
   ('Email spam issue',        'Receiving lots of spam emails.',   'open',    2, 1);
+
+-- Reset sequences to next available ID
+SELECT setval('organisation_id_seq', (SELECT MAX(id) FROM organisation));
+SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
+SELECT setval('tickets_id_seq', (SELECT MAX(id) FROM tickets));
