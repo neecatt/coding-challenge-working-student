@@ -10,3 +10,18 @@ yarn-error.log*
 # Env
 .env
 backend/.env
+
+.cursor/
+
+node_modules/
+
+backend/node_modules
+backend/dist
+backend/build
+backend/logs
+backend/generated
+backend/.env.test
+backend/coverage
+
+frontend/node_modules
+frontend/dist
