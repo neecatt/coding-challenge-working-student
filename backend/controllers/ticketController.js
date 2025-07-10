@@ -4,10 +4,13 @@ import { controllerWrapper } from '../utils/controllerWrapper.js';
 
 // Get all tickets with filtering and pagination
 export const getTickets = controllerWrapper(async (req, res) => {
-  const { status, organisation_id, user_id, limit = 50, offset = 0 } = req.query;
+  const { status, limit = 50, offset = 0 } = req.query;
+  
+  // Users can see all tickets from their organization
+  const organisationId = req.user.organisationId;
   
   const result = await TicketService.getTickets(
-    { status, organisation_id, user_id }, 
+    { status, organisation_id: organisationId }, 
     limit, 
     offset
   );
@@ -18,9 +21,19 @@ export const getTickets = controllerWrapper(async (req, res) => {
 // Get a specific ticket by ID
 export const getTicketById = controllerWrapper(async (req, res) => {
   const { id } = req.params;
+  const organisationId = req.user.organisationId;
   
   try {
     const ticket = await TicketService.getTicketById(id);
+    
+    // Ensure user can only access tickets from their organization
+    if (ticket.organisation_id !== organisationId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Access denied. You can only view tickets from your organization.' 
+      });
+    }
+    
     sendSuccess(res, ticket);
   } catch (error) {
     if (error.message === 'Ticket not found') {
@@ -33,22 +46,26 @@ export const getTicketById = controllerWrapper(async (req, res) => {
 
 // Create a new ticket
 export const createTicket = controllerWrapper(async (req, res) => {
-  const { title, description, user_id, organisation_id, status = 'open' } = req.body;
+  const { title, description, status = 'open' } = req.body;
 
   // Validation
-  if (!title || !user_id || !organisation_id) {
+  if (!title) {
     return res.status(400).json({ 
       success: false,
-      error: 'Missing required fields: title, user_id, organisation_id' 
+      error: 'Missing required fields: title' 
     });
   }
+
+  // Users can only create tickets for themselves in their organization
+  const userId = req.user.id;
+  const organisationId = req.user.organisationId;
 
   try {
     const ticket = await TicketService.createTicket({
       title,
       description,
-      user_id,
-      organisation_id,
+      user_id: userId,
+      organisation_id: organisationId,
       status
     });
     
@@ -68,15 +85,24 @@ export const createTicket = controllerWrapper(async (req, res) => {
 // Update a ticket
 export const updateTicket = controllerWrapper(async (req, res) => {
   const { id } = req.params;
-  const { title, description, status, user_id, organisation_id } = req.body;
+  const { title, description, status } = req.body;
+  const organisationId = req.user.organisationId;
 
   try {
+    // First check if the ticket belongs to the user's organization
+    const existingTicket = await TicketService.getTicketById(id);
+    if (existingTicket.organisation_id !== organisationId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Access denied. You can only update tickets from your organization.' 
+      });
+    }
+
     const ticket = await TicketService.updateTicket(id, {
       title,
       description,
       status,
-      user_id,
-      organisation_id
+      organisation_id: organisationId // Ensure user can't change organisation
     });
     
     sendSuccess(res, ticket, 'Ticket updated successfully');
@@ -102,8 +128,18 @@ export const updateTicket = controllerWrapper(async (req, res) => {
 // Delete a ticket
 export const deleteTicket = controllerWrapper(async (req, res) => {
   const { id } = req.params;
+  const organisationId = req.user.organisationId;
 
   try {
+    // First check if the ticket belongs to the user's organization
+    const existingTicket = await TicketService.getTicketById(id);
+    if (existingTicket.organisation_id !== organisationId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Access denied. You can only delete tickets from your organization.' 
+      });
+    }
+
     await TicketService.deleteTicket(id);
     sendNoContent(res);
   } catch (error) {
