@@ -1,8 +1,5 @@
 export default {
   testEnvironment: 'node',
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-  },
   testMatch: ['**/__tests__/**/*.test.js'],
   collectCoverageFrom: [
     'controllers/**/*.js',
@@ -14,6 +11,5 @@ export default {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testTimeout: 10000,
 }; 

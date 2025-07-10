@@ -8,9 +8,9 @@ export class BaseApiService {
   
   async get(endpoint) {
     try {
-      const response = await this.httpClient.requestWithRetry(endpoint);
+      const response = await this.httpClient.get(endpoint);
       ApiLogger.log('GET', endpoint, null, response);
-      return response.data;
+      return response;
     } catch (error) {
       ApiLogger.logError('GET', endpoint, null, error);
       throw error;
@@ -19,12 +19,9 @@ export class BaseApiService {
   
   async post(endpoint, data) {
     try {
-      const response = await this.httpClient.requestWithRetry(endpoint, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      const response = await this.httpClient.post(endpoint, data);
       ApiLogger.log('POST', endpoint, data, response);
-      return response.data;
+      return response;
     } catch (error) {
       ApiLogger.logError('POST', endpoint, data, error);
       throw error;
@@ -33,12 +30,9 @@ export class BaseApiService {
   
   async patch(endpoint, data) {
     try {
-      const response = await this.httpClient.requestWithRetry(endpoint, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      });
+      const response = await this.httpClient.patch(endpoint, data);
       ApiLogger.log('PATCH', endpoint, data, response);
-      return response.data;
+      return response;
     } catch (error) {
       ApiLogger.logError('PATCH', endpoint, data, error);
       throw error;
@@ -47,9 +41,7 @@ export class BaseApiService {
   
   async delete(endpoint) {
     try {
-      await this.httpClient.requestWithRetry(endpoint, {
-        method: 'DELETE',
-      });
+      await this.httpClient.delete(endpoint);
       ApiLogger.log('DELETE', endpoint, null, { success: true });
       return true;
     } catch (error) {

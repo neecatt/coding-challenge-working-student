@@ -1,6 +1,6 @@
 // Validation middleware for ticket creation
 export const validateCreateTicket = (req, res, next) => {
-  const { title, user_id, organisation_id } = req.body;
+  const { title } = req.body;
 
   const errors = [];
 
@@ -8,18 +8,10 @@ export const validateCreateTicket = (req, res, next) => {
     errors.push('Title is required');
   }
 
-  if (!user_id || isNaN(parseInt(user_id))) {
-    errors.push('Valid user_id is required');
-  }
-
-  if (!organisation_id || isNaN(parseInt(organisation_id))) {
-    errors.push('Valid organisation_id is required');
-  }
-
   if (errors.length > 0) {
     return res.status(400).json({
       success: false,
-      error: 'Validation Error',
+      error: 'Missing required fields: title',
       message: errors.join(', ')
     });
   }
@@ -29,7 +21,7 @@ export const validateCreateTicket = (req, res, next) => {
 
 // Validation middleware for ticket update
 export const validateUpdateTicket = (req, res, next) => {
-  const { title, user_id, organisation_id, status } = req.body;
+  const { title, user_id, status } = req.body;
 
   const errors = [];
 
@@ -41,12 +33,8 @@ export const validateUpdateTicket = (req, res, next) => {
     errors.push('user_id must be a valid number');
   }
 
-  if (organisation_id !== undefined && isNaN(parseInt(organisation_id))) {
-    errors.push('organisation_id must be a valid number');
-  }
-
-  if (status !== undefined && !['open', 'pending', 'closed', 'resolved'].includes(status)) {
-    errors.push('Status must be one of: open, pending, closed, resolved');
+  if (status !== undefined && !['open', 'pending', 'in_progress', 'closed', 'resolved'].includes(status)) {
+    errors.push('Status must be one of: open, pending, in_progress, closed, resolved');
   }
 
   if (errors.length > 0) {

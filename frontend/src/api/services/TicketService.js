@@ -3,6 +3,11 @@ import { QueryParameterBuilder } from '../builders/QueryParameterBuilder.js';
 
 //Ticket-specific operations
 export class TicketService extends BaseApiService {
+  constructor(client) {
+    super(client);
+    this.baseUrl = '/tickets';
+  }
+
   /**
    * Get all tickets with optional filtering and pagination
    * @param {Object} filters - Filter options
