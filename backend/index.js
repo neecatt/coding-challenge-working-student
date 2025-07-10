@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 
 import ticketRoutes from './routes/ticketRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { testConnection } from './config/database.js';
 import { requestLogger, errorLogger } from './middleware/requestLogger.js';
@@ -30,6 +31,7 @@ app.get('/ping', (_, res) => {
 });
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 
 // Error handling middleware
@@ -58,4 +60,10 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// Only start server if this file is run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startServer();
+}
+
+// Export app for testing
+export default app;
