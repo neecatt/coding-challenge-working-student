@@ -11,8 +11,10 @@ export const validateCreateTicket = (req, res, next) => {
   if (errors.length > 0) {
     return res.status(400).json({
       success: false,
-      error: 'Missing required fields: title',
-      message: errors.join(', ')
+      error: 'VALIDATION_ERROR',
+      message: 'Missing required fields: title',
+      details: errors,
+      timestamp: new Date().toISOString()
     });
   }
 
@@ -40,8 +42,10 @@ export const validateUpdateTicket = (req, res, next) => {
   if (errors.length > 0) {
     return res.status(400).json({
       success: false,
-      error: 'Validation Error',
-      message: errors.join(', ')
+      error: 'VALIDATION_ERROR',
+      message: 'Validation failed',
+      details: errors,
+      timestamp: new Date().toISOString()
     });
   }
 
@@ -55,9 +59,57 @@ export const validateId = (req, res, next) => {
   if (!id || isNaN(parseInt(id))) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid ID',
-      message: 'ID must be a valid number'
+      error: 'VALIDATION_ERROR',
+      message: 'ID must be a valid number',
+      field: 'id',
+      timestamp: new Date().toISOString()
     });
+  }
+
+  next();
+};
+
+// Generic validation middleware for required fields
+export const validateRequiredFields = (requiredFields) => {
+  return (req, res, next) => {
+    const errors = [];
+    
+    requiredFields.forEach(field => {
+      if (!req.body[field] || (typeof req.body[field] === 'string' && req.body[field].trim().length === 0)) {
+        errors.push(`${field} is required`);
+      }
+    });
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Missing required fields',
+        details: errors,
+        missingFields: requiredFields.filter(field => !req.body[field]),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    next();
+  };
+};
+
+// Email validation middleware
+export const validateEmail = (req, res, next) => {
+  const { email } = req.body;
+  
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Invalid email format',
+        field: 'email',
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   next();
