@@ -1,6 +1,15 @@
 import { TicketService } from '../services/ticketService.js';
-import { sendSuccess, sendCreated, sendNoContent, sendNotFound } from '../utils/responseHandler.js';
+import { 
+  sendSuccess, 
+  sendCreated, 
+  sendNoContent, 
+  sendNotFound, 
+  sendForbidden,
+  sendValidationError,
+  handleError 
+} from '../utils/responseHandler.js';
 import { controllerWrapper } from '../utils/controllerWrapper.js';
+import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
 
 // Get all tickets with filtering and pagination
 export const getTickets = controllerWrapper(async (req, res) => {
@@ -15,7 +24,7 @@ export const getTickets = controllerWrapper(async (req, res) => {
     offset
   );
   
-  sendSuccess(res, result);
+  sendSuccess(res, result, 'Tickets retrieved successfully');
 });
 
 // Get a specific ticket by ID
@@ -28,19 +37,12 @@ export const getTicketById = controllerWrapper(async (req, res) => {
     
     // Ensure user can only access tickets from their organization
     if (ticket.organisation_id !== organisationId) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'Access denied. You can only view tickets from your organization.' 
-      });
+      throw new ForbiddenError('Access denied. You can only view tickets from your organization.');
     }
     
-    sendSuccess(res, ticket);
+    sendSuccess(res, { ticket }, 'Ticket retrieved successfully');
   } catch (error) {
-    if (error.message === 'Ticket not found') {
-      sendNotFound(res, 'Ticket');
-    } else {
-      throw error;
-    }
+    return handleError(res, error);
   }
 });
 
@@ -48,12 +50,9 @@ export const getTicketById = controllerWrapper(async (req, res) => {
 export const createTicket = controllerWrapper(async (req, res) => {
   const { title, description, status = 'open' } = req.body;
 
-  // Validation
+  // Basic validation - TicketService will handle detailed validation
   if (!title) {
-    return res.status(400).json({ 
-      success: false,
-      error: 'Missing required fields: title' 
-    });
+    return sendValidationError(res, 'Title is required', 'title');
   }
 
   // Users can only create tickets for themselves in their organization
@@ -69,16 +68,9 @@ export const createTicket = controllerWrapper(async (req, res) => {
       status
     });
     
-    sendCreated(res, ticket, 'Ticket created successfully');
+    sendCreated(res, { ticket }, 'Ticket created successfully');
   } catch (error) {
-    if (error.message === 'User not found' || error.message === 'Organisation not found') {
-      return res.status(400).json({ 
-        success: false,
-        error: error.message 
-      });
-    } else {
-      throw error;
-    }
+    return handleError(res, error);
   }
 });
 
@@ -92,10 +84,7 @@ export const updateTicket = controllerWrapper(async (req, res) => {
     // First check if the ticket belongs to the user's organization
     const existingTicket = await TicketService.getTicketById(id);
     if (existingTicket.organisation_id !== organisationId) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'Access denied. You can only update tickets from your organization.' 
-      });
+      throw new ForbiddenError('Access denied. You can only update tickets from your organization.');
     }
 
     const ticket = await TicketService.updateTicket(id, {
@@ -105,23 +94,9 @@ export const updateTicket = controllerWrapper(async (req, res) => {
       organisation_id: organisationId // Ensure user can't change organisation
     });
     
-    sendSuccess(res, ticket, 'Ticket updated successfully');
+    sendSuccess(res, { ticket }, 'Ticket updated successfully');
   } catch (error) {
-    if (error.message === 'Ticket not found') {
-      sendNotFound(res, 'Ticket');
-    } else if (error.message === 'User not found' || error.message === 'Organisation not found') {
-      return res.status(400).json({ 
-        success: false,
-        error: error.message 
-      });
-    } else if (error.message === 'No fields to update') {
-      return res.status(400).json({ 
-        success: false,
-        error: error.message 
-      });
-    } else {
-      throw error;
-    }
+    return handleError(res, error);
   }
 });
 
@@ -134,19 +109,12 @@ export const deleteTicket = controllerWrapper(async (req, res) => {
     // First check if the ticket belongs to the user's organization
     const existingTicket = await TicketService.getTicketById(id);
     if (existingTicket.organisation_id !== organisationId) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'Access denied. You can only delete tickets from your organization.' 
-      });
+      throw new ForbiddenError('Access denied. You can only delete tickets from your organization.');
     }
 
     await TicketService.deleteTicket(id);
     sendNoContent(res);
   } catch (error) {
-    if (error.message === 'Ticket not found') {
-      sendNotFound(res, 'Ticket');
-    } else {
-      throw error;
-    }
+    return handleError(res, error);
   }
 }); 

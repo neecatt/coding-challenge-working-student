@@ -8,18 +8,33 @@ export const authenticateToken = async (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
-      return res.status(401).json({ message: 'Access token required' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Access token required',
+        timestamp: new Date().toISOString()
+      });
     }
 
     const payload = AuthService.verifyToken(token);
     if (!payload) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Invalid or expired token',
+        timestamp: new Date().toISOString()
+      });
     }
 
     // Get user from database to ensure they still exist
     const user = await UserService.findById(payload.userId);
     if (!user) {
-      return res.status(401).json({ message: 'User not found' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'User not found',
+        timestamp: new Date().toISOString()
+      });
     }
 
     // Attach user info to request object
@@ -33,7 +48,12 @@ export const authenticateToken = async (req, res, next) => {
 
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Authentication failed' });
+    return res.status(401).json({ 
+      success: false,
+      error: 'UNAUTHORIZED',
+      message: 'Authentication failed',
+      timestamp: new Date().toISOString()
+    });
   }
 };
 
@@ -49,12 +69,12 @@ export const optionalAuth = async (req, res, next) => {
 
     const payload = AuthService.verifyToken(token);
     if (!payload) {
-      return next(); // Continue without user info
+      return next(); 
     }
 
     const user = await UserService.findById(payload.userId);
     if (!user) {
-      return next(); // Continue without user info
+      return next();
     }
 
     req.user = {
@@ -67,7 +87,7 @@ export const optionalAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    next(); // Continue without user info
+    next(); 
   }
 };
 
@@ -75,14 +95,26 @@ export const optionalAuth = async (req, res, next) => {
 export const requireRole = (roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Authentication required',
+        timestamp: new Date().toISOString()
+      });
     }
 
     const userRole = req.user.role;
     const allowedRoles = Array.isArray(roles) ? roles : [roles];
 
     if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({ message: 'Insufficient permissions' });
+      return res.status(403).json({ 
+        success: false,
+        error: 'FORBIDDEN',
+        message: 'Insufficient permissions',
+        requiredRoles: allowedRoles,
+        userRole: userRole,
+        timestamp: new Date().toISOString()
+      });
     }
 
     next();
@@ -93,14 +125,24 @@ export const requireRole = (roles) => {
 export const requireOwnership = (resourceUserId) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Authentication required',
+        timestamp: new Date().toISOString()
+      });
     }
 
     const currentUserId = req.user.id;
     const resourceUserIdToCheck = req.params[resourceUserId] || req.body[resourceUserId];
 
     if (currentUserId !== parseInt(resourceUserIdToCheck)) {
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({ 
+        success: false,
+        error: 'FORBIDDEN',
+        message: 'Access denied',
+        timestamp: new Date().toISOString()
+      });
     }
 
     next();
