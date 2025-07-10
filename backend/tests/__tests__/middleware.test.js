@@ -57,40 +57,23 @@ describe('Validation Middleware', () => {
   });
 
   describe('validateCreateTicket', () => {
-    it('should pass validation for valid ticket data', () => {
-      mockReq.body = {
-        title: 'Test Ticket',
-        user_id: 1,
-        organisation_id: 1
-      };
-
-      validateCreateTicket(mockReq, mockRes, mockNext);
-
-      expect(mockNext).toHaveBeenCalled();
-      expect(mockRes.status).not.toHaveBeenCalled();
-    });
-
     it('should return 400 for missing title', () => {
-      mockReq.body = {
-        user_id: 1,
-        organisation_id: 1
-      };
+      mockReq.body = {};
 
       validateCreateTicket(mockReq, mockRes, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Validation Error',
+        error: 'Missing required fields: title',
         message: 'Title is required'
       });
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should return 400 for missing user_id', () => {
+    it('should return 400 for empty title', () => {
       mockReq.body = {
-        title: 'Test Ticket',
-        organisation_id: 1
+        title: ''
       };
 
       validateCreateTicket(mockReq, mockRes, mockNext);
@@ -98,40 +81,21 @@ describe('Validation Middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Validation Error',
-        message: 'Valid user_id is required'
+        error: 'Missing required fields: title',
+        message: 'Title is required'
       });
+      expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should return 400 for missing organisation_id', () => {
-      mockReq.body = {
-        title: 'Test Ticket',
-        user_id: 1
-      };
-
-      validateCreateTicket(mockReq, mockRes, mockNext);
-
-      expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Validation Error',
-        message: 'Valid organisation_id is required'
-      });
-    });
-
-    it('should return 400 for multiple missing fields', () => {
+    it('should pass validation for valid title', () => {
       mockReq.body = {
         title: 'Test Ticket'
       };
 
       validateCreateTicket(mockReq, mockRes, mockNext);
 
-      expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Validation Error',
-        message: 'Valid user_id is required, Valid organisation_id is required'
-      });
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockRes.status).not.toHaveBeenCalled();
     });
 
     it('should handle empty body', () => {
@@ -142,8 +106,8 @@ describe('Validation Middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Validation Error',
-        message: 'Title is required, Valid user_id is required, Valid organisation_id is required'
+        error: 'Missing required fields: title',
+        message: 'Title is required'
       });
     });
   });
@@ -379,9 +343,7 @@ describe('Integration Tests', () => {
   describe('Validation Integration', () => {
     it('should validate ticket data in route', async () => {
       const validData = {
-        title: 'Test Ticket',
-        user_id: 1,
-        organisation_id: 1
+        title: 'Test Ticket'
       };
 
       const response = await request(app)
@@ -395,8 +357,7 @@ describe('Integration Tests', () => {
 
     it('should reject invalid ticket data in route', async () => {
       const invalidData = {
-        title: 'Test Ticket'
-        // Missing user_id and organisation_id
+        // Missing title
       };
 
       const response = await request(app)
@@ -405,8 +366,8 @@ describe('Integration Tests', () => {
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Validation Error');
-      expect(response.body.message).toContain('user_id');
+      expect(response.body.error).toBe('Missing required fields: title');
+      expect(response.body.message).toContain('Title is required');
     });
 
     it('should validate ID in route', async () => {

@@ -1,457 +1,423 @@
 import request from 'supertest';
-import express from 'express';
-import { jest } from '@jest/globals';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
-// Silence console output in tests
-beforeAll(() => {
-  global.console = {
-    ...console,
-    log: jest.fn(),
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  };
-});
+const prisma = new PrismaClient();
 
-// Import mocks
-import { mockPrisma, mockTickets, mockUsers, mockOrganisations, mockCountResult, setupDbMocks, resetDbMocks } from '../mocks/dbMock.js';
-
-// Mock the database module
-jest.unstable_mockModule('../../db/prisma.js', () => ({
-  __esModule: true,
-  default: mockPrisma
-}));
-
-// Mock the logger to avoid noise in tests
-jest.unstable_mockModule('../../config/logger.js', () => ({
-  __esModule: true,
-  default: {
-    info: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
-    http: jest.fn()
-  }
-}));
-
-let ticketRoutes;
 let app;
 
+let org1, org2;
+
 beforeAll(async () => {
-  // Dynamically import after mocks
-  ticketRoutes = (await import('../../routes/ticketRoutes.js')).default;
-  app = express();
-  app.use(express.json());
-  app.use('/api/tickets', ticketRoutes);
+  // Import the app
+  const { default: expressApp } = await import('../../index.js');
+  app = expressApp;
+  
+  // Clean up database before tests
+  await prisma.refreshToken.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.organisation.deleteMany();
+
+  // Create test organizations (no explicit IDs)
+  await prisma.organisation.createMany({
+    data: [
+      { name: 'Test Org 1' },
+      { name: 'Test Org 2' }
+    ]
+  });
+  // Fetch organizations to get their IDs
+  const orgs = await prisma.organisation.findMany({ orderBy: { name: 'asc' } });
+  org1 = orgs[0];
+  org2 = orgs[1];
 });
 
-describe('Ticket API Endpoints', () => {
-  beforeEach(() => {
-    resetDbMocks();
-  });
+afterAll(async () => {
+  await prisma.$disconnect();
+});
 
-  afterEach(() => {
-    jest.clearAllMocks();
+describe('Ticket Endpoints with Organization-Based Access Control', () => {
+  let user1Token, user2Token, user3Token;
+  let user1, user2, user3;
+  let ticket1, ticket2, ticket3;
+
+  beforeEach(async () => {
+    // Clean up tickets and users before each test
+    await prisma.refreshToken.deleteMany();
+    await prisma.ticket.deleteMany();
+    await prisma.user.deleteMany();
+
+    // Create test users
+    const hashedPassword = await bcrypt.hash('SecurePass123!', 12);
+    
+    user1 = await prisma.user.create({
+      data: {
+        name: 'User 1',
+        email: 'user1@org1.com',
+        password: hashedPassword,
+        role: 'USER',
+        organisationId: org1.id
+      }
+    });
+
+    user2 = await prisma.user.create({
+      data: {
+        name: 'User 2',
+        email: 'user2@org1.com',
+        password: hashedPassword,
+        role: 'USER',
+        organisationId: org1.id
+      }
+    });
+
+    user3 = await prisma.user.create({
+      data: {
+        name: 'User 3',
+        email: 'user3@org2.com',
+        password: hashedPassword,
+        role: 'USER',
+        organisationId: org2.id
+      }
+    });
+
+    // Create test tickets
+    ticket1 = await prisma.ticket.create({
+      data: {
+        title: 'Ticket 1 - Org 1',
+        description: 'First ticket in organization 1',
+        status: 'open',
+        userId: user1.id,
+        organisationId: org1.id
+      }
+    });
+
+    ticket2 = await prisma.ticket.create({
+      data: {
+        title: 'Ticket 2 - Org 1',
+        description: 'Second ticket in organization 1',
+        status: 'pending',
+        userId: user2.id,
+        organisationId: org1.id
+      }
+    });
+
+    ticket3 = await prisma.ticket.create({
+      data: {
+        title: 'Ticket 3 - Org 2',
+        description: 'Ticket in organization 2',
+        status: 'open',
+        userId: user3.id,
+        organisationId: org2.id
+      }
+    });
+
+    // Login users to get tokens
+    const login1 = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'user1@org1.com',
+        password: 'SecurePass123!'
+      });
+    user1Token = login1.body.accessToken;
+
+    const login2 = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'user2@org1.com',
+        password: 'SecurePass123!'
+      });
+    user2Token = login2.body.accessToken;
+
+    const login3 = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'user3@org2.com',
+        password: 'SecurePass123!'
+      });
+    user3Token = login3.body.accessToken;
   });
 
   describe('GET /api/tickets', () => {
-    it('should return all tickets with pagination', async () => {
-      // Mock the database responses
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce(mockTickets) // Main query
-        .mockResolvedValueOnce(mockCountResult); // Count query
-
+    it('should return all tickets from user\'s organization', async () => {
       const response = await request(app)
         .get('/api/tickets')
+        .set('Authorization', `Bearer ${user1Token}`)
         .expect(200);
 
-      expect(response.body).toEqual({
-        success: true,
-        data: {
-          tickets: mockTickets,
-          pagination: {
-            total: 2,
-            limit: 50,
-            offset: 0
-          }
-        },
-        message: 'Success'
-      });
-
-      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.tickets).toHaveLength(2); // Should see 2 tickets from org 1
+      expect(response.body.data.tickets).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: ticket1.id,
+            title: 'Ticket 1 - Org 1',
+            organisation_id: org1.id
+          }),
+          expect.objectContaining({
+            id: ticket2.id,
+            title: 'Ticket 2 - Org 1',
+            organisation_id: org1.id
+          })
+        ])
+      );
     });
 
-    it('should filter tickets by status', async () => {
-      const filteredTickets = mockTickets.filter(t => t.status === 'open');
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce(filteredTickets)
-        .mockResolvedValueOnce([{ total: '1' }]);
+    it('should not return tickets from other organizations', async () => {
+      const response = await request(app)
+        .get('/api/tickets')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .expect(200);
 
+      // Should not see ticket3 (from org 2)
+      const org2Tickets = response.body.data.tickets.filter(ticket => ticket.organisation_id === org2.id);
+      expect(org2Tickets).toHaveLength(0);
+    });
+
+    it('should require authentication', async () => {
+      const response = await request(app)
+        .get('/api/tickets')
+        .expect(401);
+
+      expect(response.body).toHaveProperty('message', 'Access token required');
+    });
+
+    it('should filter by status', async () => {
       const response = await request(app)
         .get('/api/tickets?status=open')
+        .set('Authorization', `Bearer ${user1Token}`)
         .expect(200);
 
       expect(response.body.data.tickets).toHaveLength(1);
       expect(response.body.data.tickets[0].status).toBe('open');
     });
-
-    it('should filter tickets by organisation_id', async () => {
-      const filteredTickets = mockTickets.filter(t => t.organisation_id === 1);
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce(filteredTickets)
-        .mockResolvedValueOnce([{ total: '2' }]);
-
-      const response = await request(app)
-        .get('/api/tickets?organisation_id=1')
-        .expect(200);
-
-      expect(response.body.data.tickets).toHaveLength(2);
-      expect(response.body.data.tickets.every(t => t.organisation_id === 1)).toBe(true);
-    });
-
-    it('should handle pagination parameters', async () => {
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce(mockTickets.slice(0, 1))
-        .mockResolvedValueOnce([{ total: '2' }]);
-
-      const response = await request(app)
-        .get('/api/tickets?limit=1&offset=0')
-        .expect(200);
-
-      expect(response.body.data.pagination).toEqual({
-        total: 2,
-        limit: 1,
-        offset: 0
-      });
-    });
-
-    it('should handle database errors gracefully', async () => {
-      mockPrisma.$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
-
-      const response = await request(app)
-        .get('/api/tickets')
-        .expect(500);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Internal server error');
-    });
   });
 
   describe('GET /api/tickets/:id', () => {
-    it('should return a specific ticket by ID', async () => {
-      const singleTicket = [mockTickets[0]];
-      mockPrisma.$queryRawUnsafe.mockResolvedValue(singleTicket);
-
+    it('should return ticket from user\'s organization', async () => {
       const response = await request(app)
-        .get('/api/tickets/1')
+        .get(`/api/tickets/${ticket1.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
         .expect(200);
 
-      expect(response.body).toEqual({
-        success: true,
-        data: mockTickets[0],
-        message: 'Success'
-      });
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('id', ticket1.id);
+      expect(response.body.data).toHaveProperty('organisation_id', org1.id);
     });
 
-    it('should return 404 for non-existent ticket', async () => {
-      mockPrisma.$queryRawUnsafe.mockResolvedValue([]);
-
+    it('should allow user to access other user\'s ticket in same organization', async () => {
       const response = await request(app)
-        .get('/api/tickets/999')
-        .expect(404);
+        .get(`/api/tickets/${ticket2.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .expect(200);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('id', ticket2.id);
     });
 
-    it('should return 400 for invalid ID format', async () => {
+    it('should deny access to ticket from other organization', async () => {
       const response = await request(app)
-        .get('/api/tickets/invalid')
-        .expect(400);
+        .get(`/api/tickets/${ticket3.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .expect(403);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Invalid ID');
+      expect(response.body.error).toBe('Access denied. You can only view tickets from your organization.');
     });
 
-    it('should handle database errors', async () => {
-      mockPrisma.$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
-
+    it('should require authentication', async () => {
       const response = await request(app)
-        .get('/api/tickets/1')
-        .expect(500);
+        .get(`/api/tickets/${ticket1.id}`)
+        .expect(401);
 
-      expect(response.body.success).toBe(false);
+      expect(response.body).toHaveProperty('message', 'Access token required');
     });
   });
 
   describe('POST /api/tickets', () => {
-    const validTicketData = {
-      title: 'New Test Ticket',
-      description: 'Test description',
-      user_id: 1,
-      organisation_id: 1,
-      status: 'open'
-    };
-
-    it('should create a new ticket successfully', async () => {
-      // Mock user validation
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([mockUsers[0]]) // User exists
-        .mockResolvedValueOnce([mockOrganisations[0]]) // Organisation exists
-        .mockResolvedValueOnce([{ id: 3, ...validTicketData }]) // Insert result
-        .mockResolvedValueOnce([{ ...validTicketData, id: 3, user_name: 'Alice', organisation_name: 'Acme Corp' }]); // Full ticket
+    it('should create ticket in user\'s organization', async () => {
+      const ticketData = {
+        title: 'New Test Ticket',
+        description: 'A new test ticket',
+        status: 'open'
+      };
 
       const response = await request(app)
         .post('/api/tickets')
-        .send(validTicketData)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send(ticketData)
         .expect(201);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.data.title).toBe(validTicketData.title);
-      expect(response.body.message).toBe('Ticket created successfully');
+      expect(response.body.data).toHaveProperty('title', ticketData.title);
+      expect(response.body.data).toHaveProperty('organisation_id', org1.id);
+      expect(response.body.data).toHaveProperty('user_id', user1.id);
     });
 
-    it('should return 400 for missing required fields', async () => {
-      const invalidData = { title: 'Test Ticket' }; // Missing user_id and organisation_id
+    it('should require authentication', async () => {
+      const ticketData = {
+        title: 'New Test Ticket',
+        description: 'A new test ticket'
+      };
 
       const response = await request(app)
         .post('/api/tickets')
-        .send(invalidData)
+        .send(ticketData)
+        .expect(401);
+
+      expect(response.body).toHaveProperty('message', 'Access token required');
+    });
+
+    it('should require title field', async () => {
+      const ticketData = {
+        description: 'A new test ticket without title'
+      };
+
+      const response = await request(app)
+        .post('/api/tickets')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send(ticketData)
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Validation Error');
-      expect(response.body.message).toContain('user_id');
-      expect(response.body.message).toContain('organisation_id');
-    });
-
-    it('should return 400 for non-existent user', async () => {
-      mockPrisma.$queryRawUnsafe.mockResolvedValue([]); // User not found
-
-      const response = await request(app)
-        .post('/api/tickets')
-        .send(validTicketData)
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('User not found');
-    });
-
-    it('should return 400 for non-existent organisation', async () => {
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([mockUsers[0]]) // User exists
-        .mockResolvedValueOnce([]); // Organisation not found
-
-      const response = await request(app)
-        .post('/api/tickets')
-        .send(validTicketData)
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Organisation not found');
-    });
-
-    it('should handle database errors', async () => {
-      mockPrisma.$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
-
-      const response = await request(app)
-        .post('/api/tickets')
-        .send(validTicketData)
-        .expect(500);
-
-      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBe('Missing required fields: title');
     });
   });
 
   describe('PATCH /api/tickets/:id', () => {
-    it('should update a ticket successfully', async () => {
+    it('should update ticket in user\'s organization', async () => {
       const updateData = {
         title: 'Updated Ticket Title',
-        description: 'Test Description',
-        status: 'open', // <-- valid status
-        user_id: 1,
-        organisation_id: 1
+        status: 'closed'
       };
-
-      const updatedTicket = {
-        id: 1,
-        title: 'Updated Ticket Title',
-        description: 'Test Description',
-        status: 'open', // <-- match test input
-        user_id: 1,
-        organisation_id: 1,
-        created_at: '2024-01-01T00:00:00.000Z',
-        updated_at: '2024-01-01T00:00:00.000Z',
-        user: { id: 1, name: 'Test User' },
-        organisation: { id: 1, name: 'Test Organisation' }
-      };
-
-      // Spy on mockPrisma.$queryRawUnsafe
-      const spy = mockPrisma.$queryRawUnsafe;
-      spy.mockClear();
-      let callCount = 0;
-      spy.mockImplementation((...args) => {
-        callCount++;
-        // 1: ticket exists, 2: user exists, 3: org exists, 4: update, 5: get updated ticket
-        if (callCount === 5) return Promise.resolve([updatedTicket]);
-        return Promise.resolve([{ id: 1 }]);
-      });
 
       const response = await request(app)
-        .patch('/api/tickets/1')
-        .send(updateData);
+        .patch(`/api/tickets/${ticket1.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send(updateData)
+        .expect(200);
 
-      if (response.status !== 200) {
-        console.log('Update ticket error response:', response.body);
-      }
-
-      expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.title).toBe(updateData.title);
-      expect(response.body.data.status).toBe(updateData.status);
-      expect(response.body.message).toBe('Ticket updated successfully');
+      expect(response.body.data).toHaveProperty('title', updateData.title);
+      expect(response.body.data).toHaveProperty('status', updateData.status);
     });
 
-    it('should return 404 for non-existent ticket', async () => {
-      const updateData = { title: 'Updated Title' };
-      
-      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([]); // Ticket not found
+    it('should allow user to update other user\'s ticket in same organization', async () => {
+      const updateData = {
+        status: 'in_progress'
+      };
 
       const response = await request(app)
-        .patch('/api/tickets/999')
+        .patch(`/api/tickets/${ticket2.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
         .send(updateData)
-        .expect(404);
+        .expect(200);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('status', updateData.status);
     });
 
-    it('should return 400 for invalid user_id', async () => {
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([{ id: 1 }]) // Ticket exists
-        .mockResolvedValueOnce([]); // User not found
+    it('should deny update to ticket from other organization', async () => {
+      const updateData = {
+        title: 'Unauthorized Update'
+      };
 
       const response = await request(app)
-        .patch('/api/tickets/1')
-        .send({ user_id: 999 })
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('User not found');
-    });
-
-    it('should return 400 for invalid organisation_id', async () => {
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([{ id: 1 }]) // Ticket exists
-        .mockResolvedValueOnce([]); // Organisation not found
-
-      const response = await request(app)
-        .patch('/api/tickets/1')
-        .send({ organisation_id: 999 })
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Organisation not found');
-    });
-
-    it('should return 400 for no fields to update', async () => {
-      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([{ id: 1 }]); // Ticket exists
-
-      const response = await request(app)
-        .patch('/api/tickets/1')
-        .send({})
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('No fields to update');
-    });
-
-    it('should return 400 for invalid ID format', async () => {
-      const updateData = { title: 'Updated Title' };
-      
-      const response = await request(app)
-        .patch('/api/tickets/invalid')
+        .patch(`/api/tickets/${ticket3.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
         .send(updateData)
-        .expect(400);
+        .expect(403);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Invalid ID');
+      expect(response.body.error).toBe('Access denied. You can only update tickets from your organization.');
+    });
+
+    it('should require authentication', async () => {
+      const updateData = {
+        title: 'Unauthorized Update'
+      };
+
+      const response = await request(app)
+        .patch(`/api/tickets/${ticket1.id}`)
+        .send(updateData)
+        .expect(401);
+
+      expect(response.body).toHaveProperty('message', 'Access token required');
     });
   });
 
   describe('DELETE /api/tickets/:id', () => {
-    it('should delete a ticket successfully', async () => {
-      // Mock ticket exists
-      mockPrisma.$queryRawUnsafe.mockResolvedValue([{ id: 1 }]);
-      
-      // Mock delete operation
-      mockPrisma.$executeRawUnsafe.mockResolvedValue();
-
+    it('should delete ticket in user\'s organization', async () => {
       const response = await request(app)
-        .delete('/api/tickets/1')
+        .delete(`/api/tickets/${ticket1.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
         .expect(204);
 
-      expect(response.body).toEqual({});
+      // Verify ticket is deleted
+      const deletedTicket = await prisma.ticket.findUnique({
+        where: { id: ticket1.id }
+      });
+      expect(deletedTicket).toBeNull();
     });
 
-    it('should return 404 for non-existent ticket', async () => {
-      mockPrisma.$queryRawUnsafe.mockResolvedValue([]); // Ticket not found
-
+    it('should allow user to delete other user\'s ticket in same organization', async () => {
       const response = await request(app)
-        .delete('/api/tickets/999')
-        .expect(404);
+        .delete(`/api/tickets/${ticket2.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .expect(204);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Not Found');
+      // Verify ticket is deleted
+      const deletedTicket = await prisma.ticket.findUnique({
+        where: { id: ticket2.id }
+      });
+      expect(deletedTicket).toBeNull();
     });
 
-    it('should return 400 for invalid ID format', async () => {
+    it('should deny delete to ticket from other organization', async () => {
       const response = await request(app)
-        .delete('/api/tickets/invalid')
-        .expect(400);
+        .delete(`/api/tickets/${ticket3.id}`)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .expect(403);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Invalid ID');
+      expect(response.body.error).toBe('Access denied. You can only delete tickets from your organization.');
+
+      // Verify ticket still exists
+      const existingTicket = await prisma.ticket.findUnique({
+        where: { id: ticket3.id }
+      });
+      expect(existingTicket).not.toBeNull();
     });
 
-    it('should handle database errors', async () => {
-      mockPrisma.$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
-
+    it('should require authentication', async () => {
       const response = await request(app)
-        .delete('/api/tickets/1')
-        .expect(500);
+        .delete(`/api/tickets/${ticket1.id}`)
+        .expect(401);
 
-      expect(response.body.success).toBe(false);
+      expect(response.body).toHaveProperty('message', 'Access token required');
     });
   });
 
-  describe('Edge Cases and Error Handling', () => {
-    it('should handle malformed JSON in request body', async () => {
+  describe('Cross-Organization Access Tests', () => {
+    it('should isolate organizations completely', async () => {
+      // User 3 (org 2) should only see their own ticket
       const response = await request(app)
-        .post('/api/tickets')
-        .set('Content-Type', 'application/json')
-        .send('{"invalid": json}')
-        .expect(400);
+        .get('/api/tickets')
+        .set('Authorization', `Bearer ${user3Token}`)
+        .expect(200);
+
+      expect(response.body.data.tickets).toHaveLength(1);
+      expect(response.body.data.tickets[0].id).toBe(ticket3.id);
+      expect(response.body.data.tickets[0].organisation_id).toBe(org2.id);
     });
 
-    it.skip('should handle very large request bodies', async () => {
-      // Skipped: API does not enforce payload size limit
-    });
+    it('should prevent cross-organization ticket access', async () => {
+      // User 3 trying to access User 1's ticket
+      const response = await request(app)
+        .get(`/api/tickets/${ticket1.id}`)
+        .set('Authorization', `Bearer ${user3Token}`)
+        .expect(403);
 
-    it('should handle concurrent requests', async () => {
-      mockPrisma.$queryRawUnsafe.mockResolvedValue(mockTickets);
-
-      const promises = Array(5).fill().map(() =>
-        request(app).get('/api/tickets')
-      );
-
-      const responses = await Promise.all(promises);
-      
-      responses.forEach(response => {
-        expect(response.status).toBe(200);
-        expect(response.body.success).toBe(true);
-      });
+      expect(response.body.error).toBe('Access denied. You can only view tickets from your organization.');
     });
   });
 }); 
