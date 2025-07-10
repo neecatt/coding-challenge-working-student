@@ -26,10 +26,18 @@ export class ResponseHandler {
       errorData = { message: 'Failed to parse error response' };
     }
     
+    // Handle new standardized error format
+    const message = errorData.message || errorData.error || `HTTP error! status: ${response.status}`;
+    const errorCode = errorData.error || 'UNKNOWN_ERROR';
+    
     throw new ApiError(
-      errorData.message || `HTTP error! status: ${response.status}`,
+      message,
       response.status,
-      errorData
+      {
+        ...errorData,
+        errorCode,
+        timestamp: errorData.timestamp || new Date().toISOString()
+      }
     );
   }
   
@@ -39,7 +47,17 @@ export class ResponseHandler {
     }
     
     try {
-      return isJson ? await response.json() : await response.text();
+      const data = isJson ? await response.json() : await response.text();
+      
+      // Handle new standardized success format
+      if (isJson && data && typeof data === 'object') {
+        if (data.success !== undefined) {
+          return data.data !== undefined ? data.data : data;
+        }
+        return data;
+      }
+      
+      return data;
     } catch (error) {
       throw new ApiError('Invalid response format', response.status);
     }

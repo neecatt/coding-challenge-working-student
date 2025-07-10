@@ -1,58 +1,93 @@
 import AuthService from '../services/authService.js';
 import UserService from '../services/userService.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { 
+  sendSuccess, 
+  sendCreated, 
+  sendUnauthorized, 
+  sendConflict, 
+  sendValidationError, 
+  sendNotFound,
+  handleError 
+} from '../utils/responseHandler.js';
+import { ValidationError, UnauthorizedError, ConflictError, NotFoundError } from '../utils/errors.js';
 
 export const register = async (req, res, next) => {
   try {
     const { name, email, password, organisationId } = req.body;
+    
+    // Validate required fields
     if (!name || !email || !password || !organisationId) {
-      return res.status(400).json({ message: 'All fields are required.' });
+      return sendValidationError(res, 'All fields are required (name, email, password, organisationId)');
     }
-    if (!AuthService.validatePasswordStrength(password)) {
-      return res.status(400).json({ message: 'Password does not meet strength requirements.' });
-    }
-    const isUnique = await UserService.isEmailUnique(email);
-    if (!isUnique) {
-      return res.status(409).json({ message: 'Email already in use.' });
-    }
+
+    // UserService will handle validation and throw appropriate errors
     const user = await UserService.createUser({ name, email, password, organisationId });
-    return res.status(201).json({ message: 'User registered successfully.', user: { id: user.id, name: user.name, email: user.email } });
-  } catch (err) {
-    next(err);
+    
+    return sendCreated(res, { 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email,
+        role: user.role,
+        organisationId: user.organisationId,
+        createdAt: user.createdAt
+      } 
+    }, 'User registered successfully');
+  } catch (error) {
+    return handleError(res, error);
   }
 };
 
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
+      return sendValidationError(res, 'Email and password are required');
     }
+
     const user = await UserService.findByEmail(email);
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
+      return sendUnauthorized(res, 'Invalid credentials');
     }
-    const valid = await AuthService.verifyPassword(password, user.password);
-    if (!valid) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
+
+    const isValidPassword = await AuthService.verifyPassword(password, user.password);
+    if (!isValidPassword) {
+      return sendUnauthorized(res, 'Invalid credentials');
     }
+
     // Update last login time
     await UserService.updateLastLogin(user.id);
+
     // Generate tokens
-    const accessToken = AuthService.generateAccessToken({ userId: user.id, role: user.role });
-    const refreshToken = AuthService.generateRefreshToken({ userId: user.id, role: user.role });
+    const accessToken = AuthService.generateAccessToken({ 
+      userId: user.id, 
+      role: user.role 
+    });
+    
+    const refreshToken = AuthService.generateRefreshToken({ 
+      userId: user.id, 
+      role: user.role 
+    });
+
     // Store refresh token in DB
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN_DAYS || '7', 10) * 24 * 60 * 60 * 1000));
     await AuthService.storeRefreshToken(user.id, refreshToken, expiresAt);
-    return res.status(200).json({
+
+    return sendSuccess(res, {
       accessToken,
       refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role }
-    });
-  } catch (err) {
-    next(err);
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role,
+        organisationId: user.organisationId,
+        lastLoginAt: user.lastLoginAt
+      }
+    }, 'Login successful');
+  } catch (error) {
+    return handleError(res, error);
   }
 };
 
@@ -60,11 +95,8 @@ export const me = async (req, res, next) => {
   try {
     // User info is already attached by the auth middleware
     const user = await UserService.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
     
-    return res.status(200).json({
+    return sendSuccess(res, {
       user: {
         id: user.id,
         name: user.name,
@@ -74,43 +106,55 @@ export const me = async (req, res, next) => {
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt
       }
-    });
-  } catch (err) {
-    next(err);
+    }, 'User information retrieved successfully');
+  } catch (error) {
+    return handleError(res, error);
   }
 };
 
 export const logout = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
+    
     if (!refreshToken) {
-      return res.status(400).json({ message: 'Refresh token required.' });
+      return sendValidationError(res, 'Refresh token is required', 'refreshToken');
     }
-    await AuthService.revokeRefreshToken(refreshToken);
-    return res.status(200).json({ message: 'Logged out successfully.' });
-  } catch (err) {
-    next(err);
+
+    try {
+      await AuthService.revokeRefreshToken(refreshToken);
+    } catch (error) {
+    }
+
+    return sendSuccess(res, null, 'Logged out successfully');
+  } catch (error) {
+    return handleError(res, error);
   }
 };
 
 export const refresh = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
+    
     if (!refreshToken) {
-      return res.status(400).json({ message: 'Refresh token required.' });
+      return sendValidationError(res, 'Refresh token is required', 'refreshToken');
     }
+
+    // Validate refresh token from database
     const dbToken = await AuthService.validateRefreshToken(refreshToken);
-    if (!dbToken) {
-      return res.status(401).json({ message: 'Invalid or expired refresh token.' });
-    }
+    
+    // Verify JWT signature
     const payload = AuthService.verifyToken(refreshToken);
-    if (!payload) {
-      return res.status(401).json({ message: 'Invalid refresh token.' });
-    }
-    // Optionally rotate refresh token here
-    const accessToken = AuthService.generateAccessToken({ userId: payload.userId, role: payload.role });
-    return res.status(200).json({ accessToken });
-  } catch (err) {
-    next(err);
+
+    // Generate new access token
+    const accessToken = AuthService.generateAccessToken({ 
+      userId: payload.userId, 
+      role: payload.role 
+    });
+
+    return sendSuccess(res, { 
+      accessToken 
+    }, 'Token refreshed successfully');
+  } catch (error) {
+    return handleError(res, error);
   }
 }; 

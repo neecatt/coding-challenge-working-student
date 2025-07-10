@@ -9,10 +9,16 @@ export class BaseApiService {
   async get(endpoint) {
     try {
       const response = await this.httpClient.get(endpoint);
-      ApiLogger.log('GET', endpoint, null, response);
+      // Fire-and-forget logging (don't await to avoid blocking)
+      ApiLogger.log('GET', endpoint, null, response).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       return response;
     } catch (error) {
-      ApiLogger.logError('GET', endpoint, null, error);
+      // Fire-and-forget error logging
+      ApiLogger.logError('GET', endpoint, null, error).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       throw error;
     }
   }
@@ -20,10 +26,16 @@ export class BaseApiService {
   async post(endpoint, data) {
     try {
       const response = await this.httpClient.post(endpoint, data);
-      ApiLogger.log('POST', endpoint, data, response);
+      // Fire-and-forget logging
+      ApiLogger.log('POST', endpoint, data, response).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       return response;
     } catch (error) {
-      ApiLogger.logError('POST', endpoint, data, error);
+      // Fire-and-forget error logging
+      ApiLogger.logError('POST', endpoint, data, error).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       throw error;
     }
   }
@@ -31,10 +43,16 @@ export class BaseApiService {
   async patch(endpoint, data) {
     try {
       const response = await this.httpClient.patch(endpoint, data);
-      ApiLogger.log('PATCH', endpoint, data, response);
+      // Fire-and-forget logging
+      ApiLogger.log('PATCH', endpoint, data, response).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       return response;
     } catch (error) {
-      ApiLogger.logError('PATCH', endpoint, data, error);
+      // Fire-and-forget error logging
+      ApiLogger.logError('PATCH', endpoint, data, error).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       throw error;
     }
   }
@@ -42,10 +60,16 @@ export class BaseApiService {
   async delete(endpoint) {
     try {
       await this.httpClient.delete(endpoint);
-      ApiLogger.log('DELETE', endpoint, null, { success: true });
+      // Fire-and-forget logging
+      ApiLogger.log('DELETE', endpoint, null, { success: true }).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       return true;
     } catch (error) {
-      ApiLogger.logError('DELETE', endpoint, null, error);
+      // Fire-and-forget error logging
+      ApiLogger.logError('DELETE', endpoint, null, error).catch(err => {
+        // Silent catch to prevent unhandled promise rejection
+      });
       throw error;
     }
   }

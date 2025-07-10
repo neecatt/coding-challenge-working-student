@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTickets, createTicket, logout, getCurrentUserFromStorage } from '../api';
+import { getTickets, createTicket, updateTicket, deleteTicket, logout, getCurrentUserFromStorage } from '../api';
 
 function Tickets({ onLogout }) {
   const [tickets, setTickets] = useState([]);
@@ -9,6 +9,8 @@ function Tickets({ onLogout }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [user, setUser] = useState(null);
+  const [editingTicket, setEditingTicket] = useState(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', status: '' });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,10 +28,8 @@ function Tickets({ onLogout }) {
       setLoading(true);
       setError(null);
       const response = await getTickets();
-      console.log('Tickets API response:', response); // Debug log
       // Backend wraps data in a "data" field via sendSuccess()
       const tickets = response.data?.tickets || response.tickets || [];
-      console.log('Extracted tickets:', tickets); // Debug log
       setTickets(tickets);
     } catch (err) {
       console.error('Failed to fetch tickets:', err);
@@ -56,6 +56,53 @@ function Tickets({ onLogout }) {
       setDescription('');
     } catch (err) {
       console.error('Failed to create ticket:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleEdit = (ticket) => {
+    setEditingTicket(ticket.id);
+    setEditForm({
+      title: ticket.title,
+      description: ticket.description || '',
+      status: ticket.status
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTicket(null);
+    setEditForm({ title: '', description: '', status: '' });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm.title.trim()) {
+      setError('Title cannot be empty');
+      return;
+    }
+
+    try {
+      await updateTicket(editingTicket, editForm);
+      await fetchTickets(); // Refresh the list
+      setEditingTicket(null);
+      setEditForm({ title: '', description: '', status: '' });
+      setError(null);
+    } catch (err) {
+      console.error('Failed to update ticket:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleDelete = async (ticketId, ticketTitle) => {
+    if (!window.confirm(`Are you sure you want to delete ticket "${ticketTitle}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteTicket(ticketId);
+      await fetchTickets(); // Refresh the list
+      setError(null);
+    } catch (err) {
+      console.error('Failed to delete ticket:', err);
       setError(err.message);
     }
   };
@@ -235,6 +282,14 @@ function Tickets({ onLogout }) {
                   fontSize: '14px',
                   fontWeight: '600',
                   color: '#495057'
+                }}>Description</th>
+                <th style={{ 
+                  borderBottom: '1px solid #dee2e6', 
+                  textAlign: 'left',
+                  padding: '12px 16px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#495057'
                 }}>Status</th>
                 <th style={{ 
                   borderBottom: '1px solid #dee2e6', 
@@ -260,12 +315,21 @@ function Tickets({ onLogout }) {
                   fontWeight: '600',
                   color: '#495057'
                 }}>Created</th>
+                <th style={{ 
+                  borderBottom: '1px solid #dee2e6', 
+                  textAlign: 'center',
+                  padding: '12px 16px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#495057',
+                  width: '140px'
+                }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {tickets.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ 
+                  <td colSpan="8" style={{ 
                     textAlign: 'center', 
                     padding: '2rem', 
                     color: '#6c757d',
@@ -282,36 +346,114 @@ function Tickets({ onLogout }) {
                       fontSize: '14px',
                       color: '#495057'
                     }}>{ticket.id}</td>
+                    
+                                         {/* Title - editable */}
                     <td style={{ 
                       padding: '12px 16px',
                       fontSize: '14px',
                       fontWeight: '500',
                       color: '#212529'
-                    }}>{ticket.title}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{
-                        padding: '4px 12px',
-                        borderRadius: '20px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        backgroundColor: 
-                          ticket.status === 'open' ? '#e3f2fd' :
-                          ticket.status === 'pending' ? '#fff3e0' :
-                          ticket.status === 'in_progress' ? '#e8f5e8' :
-                          ticket.status === 'closed' ? '#f3e5f5' :
-                          '#f5f5f5',
-                        color: 
-                          ticket.status === 'open' ? '#1976d2' :
-                          ticket.status === 'pending' ? '#f57c00' :
-                          ticket.status === 'in_progress' ? '#388e3c' :
-                          ticket.status === 'closed' ? '#7b1fa2' :
-                          '#6c757d'
-                      }}>
-                        {ticket.status}
-                      </span>
+                    }}>
+                      {editingTicket === ticket.id ? (
+                        <input
+                          type="text"
+                          value={editForm.title}
+                          onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        ticket.title
+                      )}
                     </td>
+                    
+                    {/* Description - editable */}
+                    <td style={{ 
+                      padding: '12px 16px',
+                      fontSize: '14px',
+                      color: '#495057',
+                      maxWidth: '200px'
+                    }}>
+                      {editingTicket === ticket.id ? (
+                        <textarea
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '14px',
+                            minHeight: '40px',
+                            resize: 'vertical'
+                          }}
+                          placeholder="Enter description..."
+                        />
+                      ) : (
+                        <span style={{
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {ticket.description || 'No description'}
+                        </span>
+                      )}
+                    </td>
+                    
+                    {/* Status - editable */}
+                    <td style={{ padding: '12px 16px' }}>
+                      {editingTicket === ticket.id ? (
+                        <select
+                          value={editForm.status}
+                          onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                          style={{
+                            padding: '6px 8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            minWidth: '120px'
+                          }}
+                        >
+                          <option value="open">Open</option>
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="closed">Closed</option>
+                          <option value="resolved">Resolved</option>
+                        </select>
+                      ) : (
+                        <span style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          backgroundColor: 
+                            ticket.status === 'open' ? '#e3f2fd' :
+                            ticket.status === 'pending' ? '#fff3e0' :
+                            ticket.status === 'in_progress' ? '#e8f5e8' :
+                            ticket.status === 'closed' ? '#f3e5f5' :
+                            ticket.status === 'resolved' ? '#e8f5e8' :
+                            '#f5f5f5',
+                          color: 
+                            ticket.status === 'open' ? '#1976d2' :
+                            ticket.status === 'pending' ? '#f57c00' :
+                            ticket.status === 'in_progress' ? '#388e3c' :
+                            ticket.status === 'closed' ? '#7b1fa2' :
+                            ticket.status === 'resolved' ? '#388e3c' :
+                            '#6c757d'
+                        }}>
+                          {ticket.status}
+                        </span>
+                      )}
+                    </td>
+                    
                     <td style={{ 
                       padding: '12px 16px',
                       fontSize: '14px',
@@ -328,6 +470,76 @@ function Tickets({ onLogout }) {
                       color: '#6c757d'
                     }}>
                       {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : 'N/A'}
+                    </td>
+                    
+                    {/* Actions column */}
+                    <td style={{ 
+                      padding: '12px 16px',
+                      textAlign: 'center'
+                    }}>
+                      {editingTicket === ticket.id ? (
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          <button
+                            onClick={handleSaveEdit}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#6c757d',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => handleEdit(ticket)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(ticket.id, ticket.title)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

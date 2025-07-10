@@ -52,7 +52,7 @@ export const withBusinessLogging = (event, entity, action) => (controllerFn) => 
     logBusinessEvent(event, entity, action, {
       endpoint: req.originalUrl,
       method: req.method,
-      userId: req.user?.id, // If you have user context
+      userId: req.user?.id,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

@@ -1,4 +1,3 @@
-// API Configuration - Single Responsibility: Configuration management
 export const API_CONFIG = {
   timeout: 10000,
   retries: 3,
