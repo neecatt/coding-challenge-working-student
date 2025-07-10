@@ -3,7 +3,6 @@ import { ResponseHandler } from '../handlers/ResponseHandler.js';
 import { RetryStrategy } from '../strategies/RetryStrategy.js';
 import { TimeoutManager } from '../managers/TimeoutManager.js';
 
-// HTTP Client - Single Responsibility: HTTP communication
 export class HttpClient {
   async get(endpoint, options = {}) {
     return HttpClient.request(endpoint, { ...options, method: 'GET' });

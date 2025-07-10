@@ -34,9 +34,25 @@ function Register() {
       return;
     }
 
-    // Validate password strength
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long');
+    // Validate password strength (matching backend requirements)
+    const minLength = 12;
+    const maxLength = 128;
+    const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).+$/;
+    
+    if (formData.password.length < minLength) {
+      setError(`Password must be at least ${minLength} characters long`);
+      setLoading(false);
+      return;
+    }
+    
+    if (formData.password.length > maxLength) {
+      setError(`Password must be no more than ${maxLength} characters long`);
+      setLoading(false);
+      return;
+    }
+    
+    if (!strongRegex.test(formData.password)) {
+      setError('Password must contain at least one lowercase letter, one uppercase letter, one digit, and one special character');
       setLoading(false);
       return;
     }
@@ -181,9 +197,27 @@ function Register() {
               }}
               placeholder="Enter your password"
             />
-            <small style={{ color: '#666', fontSize: '12px' }}>
-              Must be at least 8 characters long
-            </small>
+            <div style={{ 
+              marginTop: '8px', 
+              padding: '12px', 
+              backgroundColor: '#f8f9fa', 
+              border: '1px solid #e9ecef', 
+              borderRadius: '4px',
+              fontSize: '12px',
+              color: '#495057'
+            }}>
+              <div style={{ fontWeight: '600', marginBottom: '6px', color: '#343a40' }}>
+                Password Requirements:
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.4' }}>
+                <li>At least 12 characters long</li>
+                <li>Maximum 128 characters</li>
+                <li>At least one lowercase letter (a-z)</li>
+                <li>At least one uppercase letter (A-Z)</li>
+                <li>At least one number (0-9)</li>
+                <li>At least one special character (!@#$%^&*()_+-=[]{}';":|\,.&lt;&gt;/?)</li>
+              </ul>
+            </div>
           </div>
 
           <div style={{ marginBottom: '1rem' }}>

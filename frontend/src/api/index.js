@@ -1,4 +1,4 @@
-// Main API module - Interface Segregation: Provides clean public interface
+// Main API module
 import { ApiFactory } from './factories/ApiFactory.js';
 import { ApiError } from './errors.js';
 
