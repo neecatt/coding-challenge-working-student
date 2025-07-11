@@ -221,6 +221,7 @@ docker-compose exec backend npx prisma migrate reset --force
 - **Database integration** using Prisma ORM with PostgreSQL
 - **Comprehensive authentication system** with JWT and refresh tokens
 - **Role-based access control** with organization-level data isolation
+- **Comprehensive testing** using Jest and Supertest to check all the functionalities
 - **Advanced security middleware** including rate limiting and request validation
 - **Docker containerization** for consistent deployment across environments
 
@@ -238,7 +239,6 @@ The challenge asked for "one extra security measure" - I implemented **multiple 
 - **File upload functionality** for ticket attachments
 - **Advanced search and filtering** capabilities
 - **API documentation** with Swagger/OpenAPI
-- **Unit and integration testing** with Jest and Supertest
 - **CI/CD pipeline** with automated testing and deployment
 
 ## 📞 **Questions or Feedback?**
